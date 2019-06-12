@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include <math.h>
 #include <iostream>
+#define NUM_TESTCASES 10
 
 using namespace std;
 
@@ -33,8 +34,8 @@ struct requiredData * newDataPackage(int nT, int tN, long ** mA, long ** mB, lon
 }
 
 void * multiply(void * x){
-  struct requiredData * data;
-  data = (struct requiredData*) x;
+  requiredData * data;
+  data = (requiredData*) x;
   int NUM_THREADS = data->numThreads;
 
   float floatLow = data->threadNumber * (data->rows /(float) NUM_THREADS);
@@ -61,8 +62,6 @@ void * multiply(void * x){
       *(matrixC[i] +j) = count;
       }
   }
-
-  printf("Fin de thread %d: fila %d a %d\n",data->threadNumber, intLow, intUp);
 }
 
 long **  allocateMatrix(int rows, int cols){
@@ -103,53 +102,42 @@ void printMatrix(long ** matrix, int rows, int cols){
   }
 }
 
+bool checkMatrix(long ** matrixC, long ** testMatrix, int rows, int cols){
+    for(int row = 0; row < rows; row++){
+        for(int col = 0; col < cols; col++){
+            if(*(matrixC[row] + col) != *(testMatrix[row] + col)) return false; 
+        }
+    }
+    return true;
+}
 
-int main(){
-  int rowsA, colsA, rowsB, colsB;	
-
-  cout << "Ingrese el número de filas para la matriz A: ";
-  cin >> rowsA;  
-
-  cout << "Ingrese el número de columnas para la matriz A: ";
-  cin >> colsA;
-
-  cout << "Ingrese el número de filas para la matriz B: ";
-  cin >> rowsB;
-
-  cout << "Ingrese el número de columnas para la matriz B: ";
-  cin >> colsB;
-
-  if(colsA == rowsB){
-    cout << "Estas matrices sí se pueden multiplicar (" << colsA <<")\n";
-
-    int NUM_THREADS;
-
-    cout << "Ingrese el número de hilos: ";
-    cin >> NUM_THREADS;
-    
+void runTestcase(int testcaseNum, int NUM_THREADS, int rowsA, int colsA, int rowsB, int colsB){
     struct timeval start;
     struct timeval end;
     long timeSecs;
     double timeMicroSecs;
     double finalTime;
+    //int NUM_THREADS = 4; //default: número óptimo de threads según testeo
+    //int rowsA = 100, colsA = 100, rowsB = 100, colsB = 100;
 
     pthread_t threadArr[NUM_THREADS];
     requiredData * passedData[NUM_THREADS];
     long ** matrixA = allocateMatrix(rowsA, colsA);
     long ** matrixB = allocateMatrix(rowsB, colsB);
     long ** matrixC = allocateMatrix(rowsA, colsB);
+    long ** testMatrix = allocateMatrix(rowsA, colsB);
     fillWithOnes(matrixA, rowsA, colsA);
-    fillWithOnes(matrixB, rowsB, colsB);
+    fillWithRandom(matrixB, rowsB, colsB, 20);
 
     gettimeofday(&start, 0);
-    
+
     for(long it = 0; it < NUM_THREADS; it++){
-      passedData[it] = newDataPackage(NUM_THREADS, it, matrixA, matrixB, matrixC, rowsA, colsA, colsB);
-      pthread_create(&threadArr[it], NULL, multiply, (void*) passedData[it]);
+        passedData[it] = newDataPackage(NUM_THREADS, it, matrixA, matrixB, matrixC, rowsA, colsA, colsB);
+        pthread_create(&threadArr[it], NULL, multiply, (void*) passedData[it]);
     }
 
     for(long cit = 0; cit < NUM_THREADS; cit++){
-      pthread_join(threadArr[cit], NULL);
+        pthread_join(threadArr[cit], NULL);
     }
 
     gettimeofday(&end, 0);
@@ -157,12 +145,49 @@ int main(){
     timeMicroSecs = (end.tv_usec - start.tv_usec)*1e-6;
 
     finalTime = (double) timeSecs + timeMicroSecs;
+    
+    auto testData = newDataPackage(1, 0, matrixA, matrixB, testMatrix, rowsA, colsA, colsB);
+    multiply((void *) testData);
 
-    /*printf("Matrix C\n");
-    printMatrix(matrixC, rowsA, colsB);*/
-    cout << "Número de hilos: " << NUM_THREADS << ". Tiempo de ejecución: " << finalTime << " secs\n";
-
-  }else{
-    printf("Estas matrices no se pueden multiplicar (%d y %d)\n", colsA, rowsB); 
-  }
+    if(checkMatrix(matrixC, testMatrix, rowsA, colsB)){ 
+        cout << "Testcase " << testcaseNum << ": pasado. Tiempo de ejecución: " << finalTime << " secs\n";
+    }else{
+        cout << "Testcase " << testcaseNum << ": fallido.\n";
+    }
 }
+
+int main(){
+    int opcion;
+    cout << "Ingrese 0 para correr testcases (" << NUM_TESTCASES << ") o 1 para usar input propio: ";
+    cin >> opcion;
+    if(opcion){
+        int rowsA, colsA, rowsB, colsB;	
+
+        cout << "Ingrese el número de filas para la matriz A: ";
+        cin >> rowsA;  
+
+        cout << "Ingrese el número de columnas para la matriz A: ";
+        cin >> colsA;
+
+        cout << "Ingrese el número de filas para la matriz B: ";
+        cin >> rowsB;
+
+        cout << "Ingrese el número de columnas para la matriz B: ";
+        cin >> colsB;
+
+        if(colsA == rowsB){
+            cout << "Estas matrices sí se pueden multiplicar (" << colsA <<")\n";
+            int NUM_THREADS;
+            cout << "Ingrese el número de hilos: ";
+            cin >> NUM_THREADS;
+            runTestcase(0, NUM_THREADS, rowsA, colsA, rowsB, colsB);
+        }else{
+            cout << "Estas matrices no se pueden multiplicar (" << colsA  <<" y "<< rowsB <<")\n"; 
+        }
+
+    }else{
+            for(int i = 0; i < NUM_TESTCASES; i++){
+                runTestcase(i, 4, 100, 100, 100, 100);
+            }
+        }
+    }
